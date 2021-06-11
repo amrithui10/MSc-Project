@@ -1,0 +1,411 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(eegkit) #for Fourier transform
+library(DescTools) #for Cronbach's alpha test
+```
+
+```{r}
+col_names <- c(
+  'Fp1',
+  'F3',
+  'F7',
+  'FT9',
+  'FC5',
+  'FC1',
+  'C3',
+  'T7',
+  'TP9',
+  'CP5',
+  'CP1',
+  'Pz',
+  'P3',
+  'P7',
+  'O1',
+  'Oz',
+  'O2',
+  'P4',
+  'P8',
+  'TP10',
+  'CP6',
+  'CP2',
+  'Cz',
+  'C4',
+  'T8',
+  'FT10',
+  'FC6',
+  'FC2',
+  'F4',
+  'F8',
+  'Fp2')
+
+electrode_map <- data.frame(electrode_number = as.character(seq_along(col_names)),
+                            electrode = col_names) %>% 
+  rowwise %>% 
+  mutate(region = case_when(
+    str_detect(electrode, "^C") ~ "Central",
+    str_detect(electrode, "^P") ~ "Parietal",
+    str_detect(electrode, "^O") ~ "Occipital",
+    str_detect(electrode, "^T") & as.numeric(str_extract(electrode, "\\d+")) %% 2 == 0 ~ "Right temporal",
+    str_detect(electrode, "^T") & as.numeric(str_extract(electrode, "\\d+")) %% 2 != 0 ~ "Left temporal",
+    str_detect(electrode, "^F") & as.numeric(str_extract(electrode, "\\d+")) %% 2 == 0 ~ "Right frontal",
+    str_detect(electrode, "^F") & as.numeric(str_extract(electrode, "\\d+")) %% 2 != 0 ~ "Left frontal"))
+```
+
+```{r}
+library(eegkit)
+
+data("eegcoord")
+enames <- rownames(eegcoord)
+
+nm <- electrode_map
+row.names(nm) <-  electrode_map$electrode
+de <- merge(nm, eegcoord, by=0, all=TRUE)  # merge by row names (by=0 or by="row.names")
+de[is.na(de)] <- 0                 # replace NA values
+nde <- de %>% drop_na()
+
+row.names(nde) <- nde$Row.names
+nde$Row.names <- NULL
+nde$electrode_number <- NULL
+
+nde <- nde %>% group_by(region)
+
+
+
+nde$color <- c("grey", "grey", "grey", "grey", "grey", "grey", "red", "red", "red", "red", "red", "red", "green", "green", "orange", "orange", "orange", "yellow", "yellow", "yellow", "yellow", "yellow", "violet", "violet", "violet", "violet", "violet", "violet", "white", "white", "white")
+
+eegcap(electrodes = nde$electrode, col.point = nde$color)
+
+
+
+```
+
+```{r}
+#averaging by frequency bands
+frequency_avg <- function(feres_electrode){
+  feres_result <- feres_electrode %>% 
+    select(-phase.shift) %>% 
+    rename(freq = frequency) %>% 
+    mutate(band = case_when(freq >= 4 & freq <= 8 ~ "theta",
+                            freq >= 8 & freq <= 16 ~ "alpha",
+                            freq >= 16 & freq <= 31 ~ "beta",
+                            freq >= 31 & freq <= 40 ~ "gamma")) %>% #gamma is not present, result has 3 frequency bands
+    group_by(band) %>% 
+    summarise(band_strength = mean(strength))
+  return(feres_result)
+}
+
+#averaging by electrodes
+area_avg <- function(electrode_df){
+  areas_result <- left_join(electrode_df, electrode_map, by = "electrode_number") %>% 
+    group_by(band, region) %>% 
+    summarise(power = mean(band_strength)) %>% 
+    ungroup
+  return(areas_result)
+}
+
+#labeling trials
+label_trials <- function(trial_data){
+  result <- trial_data %>% 
+    mutate(Trial = NA_character_)
+  n <- 1
+  for(i in 1:nrow(result)){
+    if(i > n*3000) n <- n+1
+    result$Trial[i] <- paste("Trial", n)
+    
+  }
+  return(result)
+}
+```
+
+```{r}
+home_path <- "~/Downloads/eeg_1/p1 versus p2/" #change to the path where your data is located (originally ~/Downloads/eeg_1/p1 versus p2/)
+p1_ex1 <- read.csv2(file.path(home_path, "AH_P1_EXPERIMENT_1_Segmentation_multiplexed.csv.csv"), header = F) %>% 
+  setNames(col_names)
+p1_ex2 <- read.csv2(file.path(home_path, "AH_P1_EXPERIMENT_2_Segmentation_multiplexed.csv.csv"), header = F) %>% 
+  setNames(col_names)
+p2_ex1 <- read.csv2(file.path(home_path, "AH_P2_EXPERIMENT_1_Segmentation_multiplexed.csv.csv"), header = F) %>% 
+  setNames(col_names)
+p2_ex2 <- read.csv2(file.path(home_path, "AH_P2_EXPERIMENT_2_Segmentation_multiplexed.csv.csv"), header = F) %>% 
+  setNames(col_names)
+```
+
+```{r}
+process_record <- function(record){
+  #splitting record into trials:
+  trials <- label_trials(record)
+  trial_list <- trials %>% 
+    group_by(Trial) %>% 
+    group_split(.keep = F)
+  
+  #applying FFT:
+  feres <- vector('list', length(trial_list))
+  for(i in seq_along(trial_list)){
+    for(j in seq_along(trial_list[[i]])){
+      feres[[i]][[j]] <- eegfft(trial_list[[i]][[j]], Fs=1000, lower=4, upper=30) 
+    }
+  }
+  
+  #averaging by frequency band and brain areas:
+  frequency_output <- lapply(feres, lapply, frequency_avg)
+  output_list <- lapply(frequency_output, bind_rows, .id = "electrode_number") #unlisting
+  
+  areas_output <- lapply(output_list, area_avg)
+  output_df <- bind_rows(areas_output, .id = "trial") %>%  #unlisting
+    mutate(trial = as.numeric(trial))
+  
+  return(output_df)
+}
+p1_ex1_result <- process_record(p1_ex1)
+p1_ex2_result <- process_record(p1_ex2)
+p2_ex1_result <- process_record(p2_ex1)
+p2_ex2_result <- process_record(p2_ex2)
+
+View(p1_ex1_result)
+
+
+```
+
+```{r}
+P1E1S1 <- p1_ex1_result[1:210, ] %>% group_by(band)
+P1E1S2 <- p1_ex1_result[211:420, ] %>% group_by(band)
+P1E2S1 <- p1_ex2_result[1:210, ] %>% group_by(band)
+P1E2S2 <- p1_ex2_result[211:420, ] %>% group_by(band)
+P2E1S1 <- p2_ex1_result[1:210, ] %>% group_by(band)
+P2E1S2 <- p2_ex1_result[211:420, ] %>% group_by(band)
+P2E2S1 <- p2_ex2_result[1:210, ] %>% group_by(band)
+P2E2S2 <- p2_ex2_result[211:420, ] %>% group_by(band)
+
+# band wise comparison
+
+p1e1s1 <- data.frame(summarise(P1E1S1, mean(power)))
+p1e1s2 <- data.frame(summarise(P1E1S2, mean(power)))
+p1e2s1 <- data.frame(summarise(P1E2S1, mean(power)))
+p1e2s2 <- data.frame(summarise(P1E2S2, mean(power)))
+p2e1s1 <- data.frame(summarise(P2E1S1, mean(power)))
+p2e1s2 <- data.frame(summarise(P2E1S2, mean(power)))
+p2e2s1 <- data.frame(summarise(P2E2S1, mean(power)))
+p2e2s2 <- data.frame(summarise(P2E2S2, mean(power)))
+
+p1e1s1_p1e1s2 <- t.test(p1e1s1$mean.power., p1e1s2$mean.power.)
+p1e2s1_p1e2s2 <- t.test(p1e2s1$mean.power., p1e2s2$mean.power.)
+p2e1s1_p2e1s2 <- t.test(p2e1s1$mean.power., p2e1s2$mean.power.)
+p2e2s1_p2e2s2 <- t.test(p2e2s1$mean.power., p2e2s2$mean.power.)
+
+```
+
+```{r}
+p1e1s1_p1e1s2 
+
+p1e1s1_p1e1s2_t <- data.frame(p1e1s1_p1e1s2 $data.name, p1e1s1_p1e1s2 $p.value, p1e1s1_p1e1s2 $statistic)
+
+colnames(p1e1s1_p1e1s2_t) <- c("comparison", "p.value", "statistic")
+
+p1e1s1_p1e1s2_t
+```
+
+```{r}
+p1e2s1_p1e2s2
+
+p1e2s1_p1e2s2_t <- data.frame(p1e2s1_p1e2s2$data.name, p1e2s1_p1e2s2$p.value, p1e2s1_p1e2s2$statistic)
+
+colnames(p1e2s1_p1e2s2_t) <- c("comparison", "p.value", "statistic")
+
+p1e2s1_p1e2s2_t
+```
+
+```{r}
+p2e1s1_p2e1s2
+
+p2e1s1_p2e1s2_t <- data.frame(p2e1s1_p2e1s2$data.name, p2e1s1_p2e1s2$p.value, p2e1s1_p2e1s2$statistic)
+
+colnames(p2e1s1_p2e1s2_t) <- c("comparison", "p.value", "statistic")
+
+p2e1s1_p2e1s2_t
+```
+
+```{r}
+p2e2s1_p2e2s2
+
+p2e2s1_p2e2s2_t <- data.frame(p2e2s1_p2e2s2$data.name, p2e2s1_p2e2s2$p.value, p2e2s1_p2e2s2$statistic)
+
+colnames(p2e2s1_p2e2s2_t) <- c("comparison", "p.value", "statistic")
+
+p2e2s1_p2e2s2_t
+```
+
+```{r}
+
+P1E1 <- p1_ex1_result %>% group_by(band)
+P1E2 <- p1_ex2_result %>% group_by(band)
+P2E1 <- p2_ex1_result %>% group_by(band)
+P2E2 <- p2_ex2_result %>% group_by(band)
+
+p1e1 <- data.frame(summarise(P1E1, mean(power)))
+p1e2 <- data.frame(summarise(P1E2, mean(power)))
+p2e1 <- data.frame(summarise(P2E1, mean(power)))
+p2e2 <- data.frame(summarise(P2E2, mean(power)))
+
+p1e1_p1e2 <- t.test(p1e1s1$mean.power., p1e1s2$mean.power.)
+p2e1_p2e2 <- t.test(p1e2s1$mean.power., p1e2s2$mean.power.)
+
+```
+
+```{r}
+p1e1_p1e2
+
+p1e1_p1e2_t <- data.frame(p1e1_p1e2$data.name, p1e1_p1e2$p.value, p1e1_p1e2$statistic)
+
+colnames(p1e1_p1e2_t) <- c("comparison", "p.value", "statistic")
+
+p1e1_p1e2_t
+```
+
+```{r}
+p2e1_p2e2
+
+p2e1_p2e2_t <- data.frame(p2e1_p2e2$data.name, p2e1_p2e2$p.value, p2e1_p2e2$statistic)
+
+colnames(p2e1_p2e2_t) <- c("comparison", "p.value", "statistic")
+
+p2e1_p2e2_t
+```
+
+```{r}
+all_comparisons <- rbind(p1e1s1_p1e1s2_t, p1e2s1_p1e2s2_t, p2e1s1_p2e1s2_t, p2e2s1_p2e2s2_t, p1e1_p1e2_t, p2e1_p2e2_t)
+
+all_comparisons$comparison <- c("p1e1s1 and p1e1s2", "p1e2s1 and p1e2s2", "p2e1s1 and p2e1s2", "p2e2s1 and p2e2s2", "p1e1 and p1e2", "p2e1 and p2e2")
+
+# all comparisons plot
+library(ggplot2)
+
+e_p <- ggplot(all_comparisons, aes(reorder(comparison, statistic), statistic)) +
+  geom_col(aes(fill=p.value<0.1)) +
+  coord_flip() +
+  labs(x="Comparison", y="t Statistic",
+       title="All comparisons using Welch Two Sample t-test") + 
+  theme_minimal()
+
+e_p
+
+```
+
+```{r}
+all_comparisons
+```
+
+P1E1 V P1E2 
+P2E1 V P2E2
+```{r}
+
+
+########## experiment 1
+experiment1 <- rbind(p1_ex1_result %>% mutate(experiment = 1),
+                     p1_ex2_result %>% mutate(experiment = 2)) %>% 
+  group_by(band, region) %>% 
+  group_split()
+
+ex1_for_cronbach <- lapply(experiment1, spread, experiment, power)
+
+cronbach_result <- data.frame(matrix(NA,    
+                                     nrow = length(ex1_for_cronbach),
+                                     ncol = 3)) %>% 
+  setNames(c("band", "region", "cronbach_alpha"))
+
+cronbach <- function(input_list){
+  for(i in 1:length(input_list)){
+    cronbach_result$band[i] <- unique(input_list[[i]]$band)
+    cronbach_result$region[i] <- unique(input_list[[i]]$region)
+    cronbach_result$cronbach_alpha[i] <- CronbachAlpha(t(input_list[[i]] %>% select(c("1", "2"))))
+  }
+  return(cronbach_result)
+}
+ex1_cronbach_result <- cronbach(ex1_for_cronbach)
+
+############ experiment 2
+experiment2 <- rbind(p2_ex1_result %>% mutate(experiment = 1),
+                     p2_ex2_result %>% mutate(experiment = 2)) %>% 
+  group_by(band, region) %>% 
+  group_split()
+
+ex2_for_cronbach <- lapply(experiment2, spread, experiment, power)
+
+cronbach_result <- data.frame(matrix(NA,    
+                                     nrow = length(ex2_for_cronbach),
+                                     ncol = 3)) %>% 
+  setNames(c("band", "region", "cronbach_alpha"))
+
+ex2_cronbach_result <- cronbach(ex2_for_cronbach)
+
+
+```
+
+```{r}
+ex1 <- ex1_cronbach_result
+ex2 <- ex2_cronbach_result
+
+ex1$label <- paste(ex1$band, "-", ex1$region)
+ex2$label <- paste(ex2$band, "-", ex2$region)
+
+```
+
+```{r}
+
+ex1_p <- ggplot(ex1, aes(reorder(label, cronbach_alpha), cronbach_alpha)) +
+  geom_col(aes(fill=cronbach_alpha>0.70)) +
+  coord_flip() +
+  labs(x="Frequency band - Region", y="Alpha",
+       title="P1E1 P1E2") + 
+  theme_minimal()
+
+ex1_p
+```
+
+```{r}
+
+#ex2 <- subset(ex2, label!="theta - Left frontal")
+
+ex2_p <- ggplot(ex2, aes(reorder(label, cronbach_alpha), cronbach_alpha)) +
+  geom_col(aes(fill=cronbach_alpha>0.70)) +
+  coord_flip() +
+  labs(x="Frequency band - Region", y="Alpha",
+       title="P2E1 P2E2") + 
+  theme_minimal()
+
+ex2_p 
+```
+
+
+```{r mean and SD}
+
+all_data_summary_1 <- rbind(p1_ex1_result %>% mutate(participant = 1,
+                                                   experiment = 1),
+                          p1_ex2_result %>% mutate(participant = 1,
+                                                   experiment = 2),
+                          p2_ex1_result %>% mutate(participant = 2,
+                                                   experiment = 1),
+                          p2_ex2_result %>% mutate(participant = 2,
+                                                   experiment = 2)) %>% 
+  group_by(participant, experiment, band, region) %>% 
+  summarise(mean_power = mean(power),
+            sd_power = sd(power))
+
+
+all_data_summary_1
+```
+
+
+
+```{r}
+# write.csv2(all_comparisons, file = "all_comparisons_t_test.csv", row.names = FALSE)
+# 
+# 
+# write.csv2(all_data_summary_1, file = "all_comparisons_cronbach_alpha.csv", row.names = FALSE)
+
+```

@@ -1,0 +1,2020 @@
+---
+title: "eegkit"
+author: "Amrit Hui"
+date: "6/8/2021"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)   
+library(purrr)
+library(tidyr)
+library(broom)
+
+library(ggbio)
+library(ggfortify)
+library(ggplot2)
+library(glue) #string formatting in r
+
+library(HDtest) # covariance matrix comparison
+library(data.table)
+
+set.seed(52)
+
+
+library(remotes)
+#remotes::install_github("CFWP/rags2ridges")
+library(rags2ridges) # MLE normalise matrices
+
+library(seewave) # rms function
+
+library(broom) # pretty printing results
+
+library(eegkit)
+
+```
+
+```{r}
+
+options(scipen=999)
+
+df_segments1 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments2 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+df_segments3 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments4 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+
+
+# df_wavelet <- read.csv2("EEG Files.CSV/AH-p1-ex-1-wavelet -raw-multiplexed.csv/AH_P1_EXPERIMENT_1_Wavelets_Raw Data_multiplexed.csv.csv", header = F)
+```
+
+
+```{r}
+col_names <- c(
+ 'Fp1',
+ 'F3',
+ 'F7',
+ 'FT9',
+ 'FC5',
+ 'FC1',
+ 'C3',
+ 'T7',
+ 'TP9',
+ 'CP5',
+ 'CP1',
+ 'Pz',
+ 'P3',
+ 'P7',
+ 'O1',
+ 'Oz',
+ 'O2',
+ 'P4',
+ 'P8',
+ 'TP10',
+ 'CP6',
+ 'CP2',
+ 'Cz',
+ 'C4',
+ 'T8',
+ 'FT10',
+ 'FC6',
+ 'FC2',
+ 'F4',
+ 'F8',
+ 'Fp2')
+```
+
+
+```{r}
+colnames(df_segments1) <- col_names
+colnames(df_segments2) <- col_names
+colnames(df_segments3) <- col_names
+colnames(df_segments4) <- col_names
+```
+
+```{r}
+df_segments1['trial_info'] <- 'A'
+df_segments1['trial_block'] <- 'B'
+
+df_segments1['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments1['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments1['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments1['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments1['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments1['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments1['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments1['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments1['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments1['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments1['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments1['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments1['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments1['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments1['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments1['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments1['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments1['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments1['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments1['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments1['trial_block'][1:30000, ] <- 'Set 1'
+df_segments1['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments2['trial_info'] <- 'A'
+df_segments2['trial_block'] <- 'B'
+
+df_segments2['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments2['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments2['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments2['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments2['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments2['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments2['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments2['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments2['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments2['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments2['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments2['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments2['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments2['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments2['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments2['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments2['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments2['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments2['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments2['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments2['trial_block'][1:30000, ] <- 'Set 1'
+df_segments2['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments3['trial_info'] <- 'A'
+df_segments3['trial_block'] <- 'B'
+
+df_segments3['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments3['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments3['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments3['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments3['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments3['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments3['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments3['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments3['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments3['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments3['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments3['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments3['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments3['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments3['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments3['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments3['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments3['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments3['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments3['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments3['trial_block'][1:30000, ] <- 'Set 1'
+df_segments3['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments4['trial_info'] <- 'A'
+df_segments4['trial_block'] <- 'B'
+
+df_segments4['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments4['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments4['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments4['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments4['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments4['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments4['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments4['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments4['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments4['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments4['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments4['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments4['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments4['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments4['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments4['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments4['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments4['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments4['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments4['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments4['trial_block'][1:30000, ] <- 'Set 1'
+df_segments4['trial_block'][30001:60000, ] <- 'Set 2'
+
+
+```
+FFT across each trial, across each electrode. Across each participant.
+
+Preparing dataset
+
+```{r}
+
+# getting trial info
+
+trials <- unique(df_segments1['trial_info']) # info about all trials
+
+trial_set_1 <- trials[1:10, ] # grouping variables, handy for later
+trial_set_2 <- trials[11:20, ]
+all_trials <- data.frame(trials=unlist(trials, use.names = FALSE)) # all trial names
+
+```
+
+Create a cumulative dataset called nest_data.
+
+```{r}
+
+nest_data1 <- df_segments1 %>% group_by(trial_block, trial_info)
+nest_data1$trial_info <- as.factor(nest_data1$trial_info)
+
+# splitting into lists for quickly applying a function
+split_df1 <- nest_data1 %>% group_split(trial_info, .keep = FALSE)
+
+
+nest_data2 <- df_segments2 %>% group_by(trial_block, trial_info)
+nest_data2$trial_info <- as.factor(nest_data2$trial_info)
+
+# splitting into lists for quickly applying a function
+split_df2 <- nest_data2 %>% group_split(trial_info, .keep = FALSE)
+
+nest_data3 <- df_segments3 %>% group_by(trial_block, trial_info)
+nest_data3$trial_info <- as.factor(nest_data3$trial_info)
+
+# splitting into lists for quickly applying a function
+split_df3 <- nest_data3 %>% group_split(trial_info, .keep = FALSE)
+
+nest_data4 <- df_segments4 %>% group_by(trial_block, trial_info)
+nest_data4$trial_info <- as.factor(nest_data4$trial_info)
+
+# splitting into lists for quickly applying a function
+split_df4 <- nest_data4 %>% group_split(trial_info, .keep = FALSE)
+
+```
+######################################################################################################################################################################################
+
+WITHIN EXPERIMENT 1 for Trial Set 1 and 2, for Participant 1
+
+ELECTRODE WISE
+
+
+```{r}
+
+split_dff1 <- split_df1[1:10] # trials 1 to 10
+split_dff2 <- split_df1[11:20] # trials 1 to 20
+
+feres <- vector('list', length(split_dff1))
+  for(i in seq_along(split_dff1)){
+    for(j in seq_along(split_dff1[[i]])){
+      feres[[i]][[j]] <- eegfft(split_dff1[[i]][[j]], Fs=1000, lower=4, upper=30) # mod of fft
+    }
+  }
+    
+feres_2 <- vector('list', length(split_dff2))
+  for(i in seq_along(split_dff2)){
+    for(j in seq_along(split_dff2[[i]])){
+      feres_2[[i]][[j]] <- eegfft(split_dff2[[i]][[j]], Fs=1000, lower=4, upper=30) # mod of fft
+    }
+  }
+
+View(feres)
+```
+
+```{r}
+first_trial_set <- purrr::transpose(feres) # all trials electrode wise
+
+ts1 <- vector("list", length(first_trial_set ))
+
+for(i in seq_along(first_trial_set )){
+  for(j in seq_along(first_trial_set [[i]])){
+   ts1[[i]] <-  cov(first_trial_set [[i]][[j]])
+}
+}
+
+second_trial_set <- purrr::transpose(feres_2) # all trials electrode wise
+
+ts2 <- vector("list", length(second_trial_set)) 
+             
+for(i in seq_along(second_trial_set)){
+  for(j in seq_along(second_trial_set[[i]])){
+   ts2[[i]] <-  cov(second_trial_set[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+ts1ts2 <- vector("list", length(ts1))
+
+for(i in seq_along(ts1)){
+   ts1ts2[[i]] <-  data.table(ts1[i], ts2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(ts1ts2))
+
+for(i in seq_along(ts1ts2)){
+  x <- data.frame(ts1ts2[[i]][["V1"]])
+  y <- data.frame(ts1ts2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cxts1ts2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxts1ts2, function (x) x[c("statistics")])
+location_2 <- lapply(cxts1ts2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xts1ts2 <- data.frame(ldf11, ldf2)
+
+ndf_xts1ts2$Electrode <- row.names(ndf_xts1ts2)  
+
+new <- ndf_xts1ts2
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P1E1_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+
+
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 1 Experiment 1") + 
+  theme_minimal()
+
+#png('P1E1_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 1 Experiment 1") + 
+  theme_minimal()
+
+#png('P1E1_Electrode_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+
+TRIAL SET WISE
+
+```{r}
+first_trial_block <- feres # all trials block wise
+
+tb1 <- vector("list", length(first_trial_block ))
+
+for(i in seq_along(first_trial_block )){
+  for(j in seq_along(first_trial_block [[i]])){
+   tb1[[i]] <-  cov(first_trial_block [[i]][[j]])
+}
+}
+
+second_trial_block <- feres_2 # all trials block wise
+
+tb2 <- vector("list", length(second_trial_block)) 
+             
+for(i in seq_along(second_trial_block)){
+  for(j in seq_along(second_trial_block[[i]])){
+   tb2[[i]] <-  cov(second_trial_block[[i]][[j]])
+}
+}  
+
+```
+
+```{r}
+
+tb1tb2 <- vector("list", length(tb1))
+
+for(i in seq_along(tb1)){
+   tb1tb2[[i]] <-  data.table(tb1[i], tb2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(tb1tb2))
+
+for(i in seq_along(tb1tb2)){
+  x <- data.frame(tb1tb2[[i]][["V1"]])
+  y <- data.frame(tb1tb2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info[1:10]
+
+
+# extract electrode names, p values and statistic
+
+cxtb1tb2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxtb1tb2, function (x) x[c("statistics")])
+location_2 <- lapply(cxtb1tb2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xtb1tb2 <- data.frame(ldf11, ldf2)
+
+ndf_xtb1tb2$Trials <- row.names(ndf_xtb1tb2)
+
+
+new_t <- ndf_xtb1tb2  
+new_t <- apply(new_t,2,as.character)
+
+#write.csv(new_t,'P1E1_Trial_set_Wise.csv', row.names = FALSE)
+
+new_t
+
+
+```
+
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 1 Experiment 1") + 
+  theme_minimal()
+
+#png('P1E1_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 1 Experiment 1") + 
+  theme_minimal()
+
+#png('P1E1_Trial_block_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+
+WITHIN EXPERIMENT 2 for Trial Set 1 and 2, for Participant 1 Experiment 2
+
+ELECTRODE WISE
+
+```{r}
+
+split_dff1 <- split_df2[1:10] # trials 1 to 10
+split_dff2 <- split_df2[11:20] # trials 1 to 20
+
+feres <- vector('list', length(split_dff1))
+  for(i in seq_along(split_dff1)){
+    for(j in seq_along(split_dff1[[i]])){
+      feres[[i]][[j]] <- eegfft(split_dff1[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+feres_2 <- vector('list', length(split_dff2))
+  for(i in seq_along(split_dff2)){
+    for(j in seq_along(split_dff2[[i]])){
+      feres_2[[i]][[j]] <- eegfft(split_dff2[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+```
+
+```{r}
+first_trial_set <- purrr::transpose(feres) # all trials electrode wise
+
+ts1 <- vector("list", length(first_trial_set ))
+
+for(i in seq_along(first_trial_set )){
+  for(j in seq_along(first_trial_set [[i]])){
+   ts1[[i]] <-  cov(first_trial_set [[i]][[j]])
+}
+}
+
+second_trial_set <- purrr::transpose(feres_2) # all trials electrode wise
+
+ts2 <- vector("list", length(second_trial_set)) 
+             
+for(i in seq_along(second_trial_set)){
+  for(j in seq_along(second_trial_set[[i]])){
+   ts2[[i]] <-  cov(second_trial_set[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+ts1ts2 <- vector("list", length(ts1))
+
+for(i in seq_along(ts1)){
+   ts1ts2[[i]] <-  data.table(ts1[i], ts2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(ts1ts2))
+
+for(i in seq_along(ts1ts2)){
+  x <- data.frame(ts1ts2[[i]][["V1"]])
+  y <- data.frame(ts1ts2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cxts1ts2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxts1ts2, function (x) x[c("statistics")])
+location_2 <- lapply(cxts1ts2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xts1ts2 <- data.frame(ldf11, ldf2)
+
+ndf_xts1ts2$Electrode <- row.names(ndf_xts1ts2)  
+
+new <- ndf_xts1ts2
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P1E2_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 1 Experiment 2") + 
+  theme_minimal()
+
+#png('P1E2_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 1 Experiment 2") + 
+  theme_minimal()
+
+#png('P1E2_Electrode_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+
+TRIAL SET WISE
+
+```{r}
+first_trial_block <- feres # all trials block wise
+
+tb1 <- vector("list", length(first_trial_block ))
+
+for(i in seq_along(first_trial_block )){
+  for(j in seq_along(first_trial_block [[i]])){
+   tb1[[i]] <-  cov(first_trial_block [[i]][[j]])
+}
+}
+
+second_trial_block <- feres_2 # all trials block wise
+
+tb2 <- vector("list", length(second_trial_block)) 
+             
+for(i in seq_along(second_trial_block)){
+  for(j in seq_along(second_trial_block[[i]])){
+   tb2[[i]] <-  cov(second_trial_block[[i]][[j]])
+}
+}  
+
+```
+
+```{r}
+
+tb1tb2 <- vector("list", length(tb1))
+
+for(i in seq_along(tb1)){
+   tb1tb2[[i]] <-  data.table(tb1[i], tb2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(tb1tb2))
+
+for(i in seq_along(tb1tb2)){
+  x <- data.frame(tb1tb2[[i]][["V1"]])
+  y <- data.frame(tb1tb2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info[1:10]
+
+
+# extract electrode names, p values and statistic
+
+cxtb1tb2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxtb1tb2, function (x) x[c("statistics")])
+location_2 <- lapply(cxtb1tb2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xtb1tb2 <- data.frame(ldf11, ldf2)
+
+ndf_xtb1tb2$Trials <- row.names(ndf_xtb1tb2)
+
+new_x <- ndf_xtb1tb2
+new_x <- apply(new_x,2,as.character)
+
+#write.csv(new_x,'P1E2_Trial_block_Wise.csv', row.names = FALSE)
+
+new_x
+
+```
+
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 1 Experiment 2") + 
+  theme_minimal()
+#png('P1E2_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 1 Experiment 2") + 
+  theme_minimal()
+
+#png('P1E2_Trial_block_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+
+WITHIN EXPERIMENT 1 for Trial Set 1 and 2, for Participant 2 Experiment 1
+ELECTRODE WISE
+
+```{r}
+
+split_dff1 <- split_df3[1:10] # trials 1 to 10
+split_dff2 <- split_df3[11:20] # trials 1 to 20
+
+feres <- vector('list', length(split_dff1))
+  for(i in seq_along(split_dff1)){
+    for(j in seq_along(split_dff1[[i]])){
+      feres[[i]][[j]] <- eegfft(split_dff1[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+feres_2 <- vector('list', length(split_dff2))
+  for(i in seq_along(split_dff2)){
+    for(j in seq_along(split_dff2[[i]])){
+      feres_2[[i]][[j]] <- eegfft(split_dff2[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+```
+
+```{r}
+first_trial_set <- purrr::transpose(feres) # all trials electrode wise
+
+ts1 <- vector("list", length(first_trial_set ))
+
+for(i in seq_along(first_trial_set )){
+  for(j in seq_along(first_trial_set [[i]])){
+   ts1[[i]] <-  cov(first_trial_set [[i]][[j]])
+}
+}
+
+second_trial_set <- purrr::transpose(feres_2) # all trials electrode wise
+
+ts2 <- vector("list", length(second_trial_set)) 
+             
+for(i in seq_along(second_trial_set)){
+  for(j in seq_along(second_trial_set[[i]])){
+   ts2[[i]] <-  cov(second_trial_set[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+ts1ts2 <- vector("list", length(ts1))
+
+for(i in seq_along(ts1)){
+   ts1ts2[[i]] <-  data.table(ts1[i], ts2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(ts1ts2))
+
+for(i in seq_along(ts1ts2)){
+  x <- data.frame(ts1ts2[[i]][["V1"]])
+  y <- data.frame(ts1ts2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cxts1ts2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxts1ts2, function (x) x[c("statistics")])
+location_2 <- lapply(cxts1ts2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xts1ts2 <- data.frame(ldf11, ldf2)
+
+ndf_xts1ts2$Electrode <- row.names(ndf_xts1ts2)  
+
+new <- ndf_xts1ts2
+new <- apply(new,2,as.character)  
+
+#write.csv(new,'P2E1_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 2 Experiment 1") + 
+  theme_minimal()
+
+#png('P2E1_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 2 Experiment 1") + 
+  theme_minimal()
+
+#png('P2E1_Electrode_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+
+TRIAL SET WISE
+
+```{r}
+first_trial_block <- feres # all trials block wise
+
+tb1 <- vector("list", length(first_trial_block ))
+
+for(i in seq_along(first_trial_block )){
+  for(j in seq_along(first_trial_block [[i]])){
+   tb1[[i]] <-  cov(first_trial_block [[i]][[j]])
+}
+}
+
+second_trial_block <- feres_2 # all trials block wise
+
+tb2 <- vector("list", length(second_trial_block)) 
+             
+for(i in seq_along(second_trial_block)){
+  for(j in seq_along(second_trial_block[[i]])){
+   tb2[[i]] <-  cov(second_trial_block[[i]][[j]])
+}
+}  
+
+```
+
+```{r}
+
+tb1tb2 <- vector("list", length(tb1))
+
+for(i in seq_along(tb1)){
+   tb1tb2[[i]] <-  data.table(tb1[i], tb2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(tb1tb2))
+
+for(i in seq_along(tb1tb2)){
+  x <- data.frame(tb1tb2[[i]][["V1"]])
+  y <- data.frame(tb1tb2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info[1:10]
+
+
+# extract electrode names, p values and statistic
+
+cxtb1tb2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxtb1tb2, function (x) x[c("statistics")])
+location_2 <- lapply(cxtb1tb2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xtb1tb2 <- data.frame(ldf11, ldf2)
+
+ndf_xtb1tb2$Trials <- row.names(ndf_xtb1tb2)
+
+new <- ndf_xtb1tb2
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P2E1_Trial_block_Wise.csv', row.names = FALSE)
+
+new
+
+```
+
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 2 Experiment 1") + 
+  theme_minimal()
+#png('P2E1_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 2 Experiment 1") + 
+  theme_minimal()
+
+#png('P2E1_Trial_block_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+
+WITHIN EXPERIMENT 1 for Trial Set 1 and 2, for Participant 2 Experiment 2
+ELECTRODE WISE
+
+```{r}
+
+split_dff1 <- split_df4[1:10] # trials 1 to 10
+split_dff2 <- split_df4[11:20] # trials 1 to 20
+
+feres <- vector('list', length(split_dff1))
+  for(i in seq_along(split_dff1)){
+    for(j in seq_along(split_dff1[[i]])){
+      feres[[i]][[j]] <- eegfft(split_dff1[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+feres_2 <- vector('list', length(split_dff2))
+  for(i in seq_along(split_dff2)){
+    for(j in seq_along(split_dff2[[i]])){
+      feres_2[[i]][[j]] <- eegfft(split_dff2[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+```
+
+```{r}
+first_trial_set <- purrr::transpose(feres) # all trials electrode wise
+
+ts1 <- vector("list", length(first_trial_set ))
+
+for(i in seq_along(first_trial_set )){
+  for(j in seq_along(first_trial_set [[i]])){
+   ts1[[i]] <-  cov(first_trial_set [[i]][[j]])
+}
+}
+
+second_trial_set <- purrr::transpose(feres_2) # all trials electrode wise
+
+ts2 <- vector("list", length(second_trial_set)) 
+             
+for(i in seq_along(second_trial_set)){
+  for(j in seq_along(second_trial_set[[i]])){
+   ts2[[i]] <-  cov(second_trial_set[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+ts1ts2 <- vector("list", length(ts1))
+
+for(i in seq_along(ts1)){
+   ts1ts2[[i]] <-  data.table(ts1[i], ts2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(ts1ts2))
+
+for(i in seq_along(ts1ts2)){
+  x <- data.frame(ts1ts2[[i]][["V1"]])
+  y <- data.frame(ts1ts2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cxts1ts2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxts1ts2, function (x) x[c("statistics")])
+location_2 <- lapply(cxts1ts2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xts1ts2 <- data.frame(ldf11, ldf2)
+ndf_xts1ts2$Electrode <- row.names(ndf_xts1ts2)  
+
+new <- ndf_xts1ts2 
+new <- apply(new,2,as.character) 
+
+#write.csv(new,'P2E2_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 2 Experiment 2") + 
+  theme_minimal()
+
+#png('P2E2_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+```{r}
+
+ts12 <- ggplot(ndf_xts1ts2, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Trial 1 
+       versus Trial 2 sorted by HD statistic
+       for Participant 2 Experiment 2") + 
+  theme_minimal()
+
+#png('P2E2_Electrode_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+ts12
+#dev.off()
+
+ts12
+```
+
+TRIAL SET WISE
+
+```{r}
+first_trial_block <- feres # all trials block wise
+
+tb1 <- vector("list", length(first_trial_block ))
+
+for(i in seq_along(first_trial_block )){
+  for(j in seq_along(first_trial_block [[i]])){
+   tb1[[i]] <-  cov(first_trial_block [[i]][[j]])
+}
+}
+
+second_trial_block <- feres_2 # all trials block wise
+
+tb2 <- vector("list", length(second_trial_block)) 
+             
+for(i in seq_along(second_trial_block)){
+  for(j in seq_along(second_trial_block[[i]])){
+   tb2[[i]] <-  cov(second_trial_block[[i]][[j]])
+}
+}  
+
+```
+
+```{r}
+
+tb1tb2 <- vector("list", length(tb1))
+
+for(i in seq_along(tb1)){
+   tb1tb2[[i]] <-  data.table(tb1[i], tb2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(tb1tb2))
+
+for(i in seq_along(tb1tb2)){
+  x <- data.frame(tb1tb2[[i]][["V1"]])
+  y <- data.frame(tb1tb2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info[1:10]
+
+
+# extract electrode names, p values and statistic
+
+cxtb1tb2 <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxtb1tb2, function (x) x[c("statistics")])
+location_2 <- lapply(cxtb1tb2, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_xtb1tb2 <- data.frame(ldf11, ldf2)
+
+ndf_xtb1tb2$Trials <- row.names(ndf_xtb1tb2)
+
+new <- ndf_xtb1tb2
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P2E2_Trial_block_Wise.csv')
+
+new
+
+```
+
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 2 Experiment 2") + 
+  theme_minimal()
+#png('P2E2_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+```{r}
+
+tb12 <- ggplot(ndf_xtb1tb2, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Trials significant in Trial block 1 
+       versus Trial block 2 sorted by HD statistic
+       for Participant 2 Experiment 2") + 
+  theme_minimal()
+
+#png('P2E2_Trial_block_Wise_point_01.#png', units="in", width=5, height=5, res=300)
+tb12
+#dev.off()
+
+tb12
+```
+
+########################################################################################################################################################################################
+
+BETWEEN EXPERIMENTS 1 and 2 for Participant 1
+
+```{r}
+
+eres <- vector('list', length(split_df1))
+  for(i in seq_along(split_df1)){
+    for(j in seq_along(split_df1[[i]])){
+      eres[[i]][[j]] <- eegfft(split_df1[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+eres_2 <- vector('list', length(split_df2))
+  for(i in seq_along(split_df2)){
+    for(j in seq_along(split_df2[[i]])){
+      eres_2[[i]][[j]] <- eegfft(split_df2[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+
+```
+
+ELECTRODE WISE
+
+```{r}
+
+first_exp <- purrr::transpose(eres) # all trials electrode wise
+
+l1 <- vector("list", length(first_exp ))
+
+for(i in seq_along(first_exp )){
+  for(j in seq_along(first_exp [[i]])){
+   l1[[i]] <-  cov(first_exp [[i]][[j]])
+}
+}
+
+second_exp <- purrr::transpose(eres_2) # all trials electrode wise
+
+l2 <- vector("list", length(second_exp)) 
+             
+for(i in seq_along(second_exp)){
+  for(j in seq_along(second_exp[[i]])){
+   l2[[i]] <-  cov(second_exp[[i]][[j]])
+}
+} 
+
+
+```
+
+
+```{r}
+
+
+l1l2 <- vector("list", length(l1))
+
+for(i in seq_along(l1)){
+   l1l2[[i]] <-  data.table(l1[i], l2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(l1l2))
+
+for(i in seq_along(l1l2)){
+  x <- data.frame(l1l2[[i]][["V1"]])
+  y <- data.frame(l1l2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cx <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cx, function (x) x[c("statistics")])
+location_2 <- lapply(cx, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_x <- data.frame(ldf11, ldf2)
+
+ndf_x$Electrode <- row.names(ndf_x)
+
+new <- ndf_x
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P1E1_P1E2_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+sxx <- ggplot(ndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 1") + 
+  theme_minimal()
+
+#png('P1E1_P1E2_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxx
+#dev.off()
+
+sxx
+```
+
+```{r}
+sxx <- ggplot(ndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 1") + 
+  theme_minimal()
+
+
+#png('P1E1_P1E2_Electrode_Wise_point_1.#png', units="in", width=5, height=5, res=300)
+sxx
+#dev.off()
+
+sxx
+
+```
+
+TRIAL WISE E1 E2
+
+```{r}
+first_expt <- eres # all trials electrode wise
+
+l1t <- vector("list", length(first_expt ))
+
+for(i in seq_along(first_expt )){
+  for(j in seq_along(first_expt [[i]])){
+   l1t[[i]] <-  cov(first_expt [[i]][[j]])
+}
+}
+
+second_expt <- eres_2 # all trials electrode wise
+
+l2t <- vector("list", length(second_expt)) 
+             
+for(i in seq_along(second_expt)){
+  for(j in seq_along(second_expt[[i]])){
+   l2t[[i]] <-  cov(second_expt[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+l1tl2t <- vector("list", length(l1t))
+
+for(i in seq_along(l1t)){
+   l1tl2t[[i]] <-  data.table(l1t[i], l2t[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(l1tl2t))
+
+for(i in seq_along(l1tl2t)){
+  x <- data.frame(l1tl2t[[i]][["V1"]])
+  y <- data.frame(l1tl2t[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info
+
+
+# extract electrode names, p values and statistic
+
+cxt <- comparisons
+
+vars <- c("Trial", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxt, function (x) x[c("statistics")])
+location_2 <- lapply(cxt, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1t <- do.call(rbind, location_1)
+ldf1t1 <- do.call(rbind,ldf1t)
+
+#convert pvalues into dataframe column
+ldf2t <- do.call(rbind, location_2)
+
+ndf_xt <- data.frame(ldf1t1, ldf2t)
+
+ndf_xt$Trials <- row.names(ndf_xt)
+
+new <- ndf_xt
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P1E1_P1E2_Trial_block_Wise.csv', row.names = FALSE)
+
+new
+
+
+```
+
+
+```{r}
+sxt <- ggplot(ndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 1") + 
+  theme_minimal()
+
+#png('P1E1_P1E2_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+```{r}
+sxt <- ggplot(ndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 1") + 
+  theme_minimal()
+
+#png('P1E1_P1E2_Trail_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+BETWEEN EXPERIMENTS 1 and 2 for Participant 2
+
+```{r}
+
+eres <- vector('list', length(split_df3))
+  for(i in seq_along(split_df3)){
+    for(j in seq_along(split_df3[[i]])){
+      eres[[i]][[j]] <- eegfft(split_df3[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+eres_2 <- vector('list', length(split_df4))
+  for(i in seq_along(split_df4)){
+    for(j in seq_along(split_df4[[i]])){
+      eres_2[[i]][[j]] <- eegfft(split_df4[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+
+```
+
+ELECTRODE WISE
+
+```{r}
+
+first_exp <- purrr::transpose(eres) # all trials electrode wise
+
+l1 <- vector("list", length(first_exp ))
+
+for(i in seq_along(first_exp )){
+  for(j in seq_along(first_exp [[i]])){
+   l1[[i]] <-  cov(first_exp [[i]][[j]])
+}
+}
+
+second_exp <- purrr::transpose(eres_2) # all trials electrode wise
+
+l2 <- vector("list", length(second_exp)) 
+             
+for(i in seq_along(second_exp)){
+  for(j in seq_along(second_exp[[i]])){
+   l2[[i]] <-  cov(second_exp[[i]][[j]])
+}
+} 
+
+
+```
+
+
+```{r}
+
+
+l1l2 <- vector("list", length(l1))
+
+for(i in seq_along(l1)){
+   l1l2[[i]] <-  data.table(l1[i], l2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(l1l2))
+
+for(i in seq_along(l1l2)){
+  x <- data.frame(l1l2[[i]][["V1"]])
+  y <- data.frame(l1l2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+cx <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cx, function (x) x[c("statistics")])
+location_2 <- lapply(cx, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1 <- do.call(rbind, location_1)
+ldf11 <- do.call(rbind,ldf1)
+
+#convert pvalues into dataframe column
+ldf2 <- do.call(rbind, location_2)
+
+ndf_x <- data.frame(ldf11, ldf2)
+
+ndf_x$Electrode <- row.names(ndf_x)
+
+new <- ndf_x
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P2E1_P2E2_Electrode_Wise.csv', row.names = FALSE)
+
+new
+```
+
+```{r}
+sxx <- ggplot(ndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 2") + 
+  theme_minimal()
+
+#png('P2E1_P2E2_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxx
+#dev.off()
+
+sxx
+```
+```{r}
+sxx <- ggplot(ndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="Electrodes significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 2") + 
+  theme_minimal()
+
+
+#png('P2E1_P2E2_Electrode_Wise_point_1.#png', units="in", width=5, height=5, res=300)
+sxx
+#dev.off()
+
+sxx
+
+```
+
+TRIAL WISE E1 E2
+
+```{r}
+first_expt <- eres # all trials electrode wise
+
+l1t <- vector("list", length(first_expt ))
+
+for(i in seq_along(first_expt )){
+  for(j in seq_along(first_expt [[i]])){
+   l1t[[i]] <-  cov(first_expt [[i]][[j]])
+}
+}
+
+second_expt <- eres_2 # all trials electrode wise
+
+l2t <- vector("list", length(second_expt)) 
+             
+for(i in seq_along(second_expt)){
+  for(j in seq_along(second_expt[[i]])){
+   l2t[[i]] <-  cov(second_expt[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+l1tl2t <- vector("list", length(l1t))
+
+for(i in seq_along(l1t)){
+   l1tl2t[[i]] <-  data.table(l1t[i], l2t[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(l1tl2t))
+
+for(i in seq_along(l1tl2t)){
+  x <- data.frame(l1tl2t[[i]][["V1"]])
+  y <- data.frame(l1tl2t[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info
+
+
+# extract electrode names, p values and statistic
+
+cxt <- comparisons
+
+vars <- c("Trial", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cxt, function (x) x[c("statistics")])
+location_2 <- lapply(cxt, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ldf1t <- do.call(rbind, location_1)
+ldf1t1 <- do.call(rbind,ldf1t)
+
+#convert pvalues into dataframe column
+ldf2t <- do.call(rbind, location_2)
+
+ndf_xt <- data.frame(ldf1t1, ldf2t)
+
+ndf_xt$Trials <- row.names(ndf_xt)
+
+new <- ndf_xt
+new <- apply(new,2,as.character)
+
+#write.csv(new,'P2E1_P2E2_Trial_block_Wise.csv', row.names = FALSE)
+
+new
+
+```
+
+
+```{r}
+sxt <- ggplot(ndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 2") + 
+  theme_minimal()
+
+#png('P2E1_P2E2_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+```{r}
+sxt <- ggplot(ndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for Participant 2") + 
+  theme_minimal()
+
+#png('P2E1_P2E2_Trail_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+
+######################################################################################################################################################################################
+
+
+Between P1 and P2
+
+
+```{r}
+c_df1 <- rbind(split_df1, split_df2)
+
+c_df2 <- rbind(split_df3, split_df4)
+
+ceres <- vector('list', length(c_df1))
+  for(i in seq_along(c_df1)){
+    for(j in seq_along(c_df1[[i]])){
+      ceres[[i]][[j]] <- eegfft(c_df1[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+ceres_2 <- vector('list', length(c_df2))
+  for(i in seq_along(c_df2)){
+    for(j in seq_along(c_df2[[i]])){
+      ceres_2[[i]][[j]] <- eegfft(c_df2[[i]][[j]], Fs=1000, lower=4, upper=40) # mod of fft
+    }
+  }
+
+
+```
+
+ELECTRODE WISE
+
+```{r}
+
+first_participant <- purrr::transpose(ceres) # all trials electrode wise
+
+cl1 <- vector("list", length(first_participant ))
+
+for(i in seq_along(first_participant )){
+  for(j in seq_along(first_participant [[i]])){
+   cl1[[i]] <-  cov(first_participant [[i]][[j]])
+}
+}
+
+second_participant <- purrr::transpose(ceres_2) # all trials electrode wise
+
+cl2 <- vector("list", length(second_participant)) 
+             
+for(i in seq_along(second_participant)){
+  for(j in seq_along(second_participant[[i]])){
+   cl2[[i]] <-  cov(second_participant[[i]][[j]])
+}
+} 
+
+
+```
+
+
+```{r}
+
+
+cl1cl2 <- vector("list", length(cl1))
+
+for(i in seq_along(cl1)){
+   cl1cl2[[i]] <-  data.table(cl1[i], cl2[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(cl1cl2))
+
+for(i in seq_along(cl1cl2)){
+  x <- data.frame(cl1cl2[[i]][["V1"]])
+  y <- data.frame(cl1cl2[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+# get names of electrodes
+names(comparisons) <- col_names
+
+# extract electrode names, p values and statistic
+
+ccx <- comparisons
+
+vars <- c("Electrode", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(ccx, function (x) x[c("statistics")])
+location_2 <- lapply(ccx, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+cldf1 <- do.call(rbind, location_1)
+cldf11 <- do.call(rbind,cldf1)
+
+#convert pvalues into dataframe column
+cldf2 <- do.call(rbind, location_2)
+
+cndf_x <- data.frame(cldf11, cldf2)
+
+cndf_x$Electrode <- col_names
+
+ccnew <- cndf_x
+
+ccnew <- apply(ccnew,2,as.character)
+
+#write.csv(ccnew,'P1_P2_Electrode_Wise.csv', row.names = FALSE)
+
+ccnew
+```
+
+```{r}
+csxx <- ggplot(cndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="P1 versus P2") + 
+  theme_minimal()
+
+#png('P1P2_Electrode_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+csxx
+#dev.off()
+
+csxx
+```
+```{r}
+csxx <- ggplot(cndf_x, aes(reorder(Electrode, Statistic), Statistic)) +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Electrode", y="Statistic",
+       title="P1 versus P2") + 
+  theme_minimal()
+
+
+#png('P1P2_Electrode_Wise_point_1.#png', units="in", width=5, height=5, res=300)
+csxx
+#dev.off()
+
+csxx
+
+```
+
+TRIAL WISE E1 E2
+
+```{r}
+first_participant_t <- ceres # all trials electrode wise
+
+ccl1t <- vector("list", length(first_participant_t ))
+
+for(i in seq_along(first_participant_t )){
+  for(j in seq_along(first_participant_t [[i]])){
+   ccl1t[[i]] <-  cov(first_participant_t [[i]][[j]])
+}
+}
+
+second_participant_t <- ceres_2 # all trials electrode wise
+
+ccl2t <- vector("list", length(second_participant_t)) 
+             
+for(i in seq_along(second_participant_t)){
+  for(j in seq_along(second_participant_t[[i]])){
+   ccl2t[[i]] <-  cov(second_participant_t[[i]][[j]])
+}
+} 
+
+```
+
+```{r}
+
+ccl1tccl2t <- vector("list", length(ccl1t))
+
+for(i in seq_along(ccl1t)){
+   ccl1tccl2t[[i]] <-  data.table(ccl1t[i], ccl2t[i])
+}
+
+# perform comparisons
+
+comparisons <- vector("list", length(ccl1tccl2t))
+
+for(i in seq_along(ccl1tccl2t)){
+  x <- data.frame(ccl1tccl2t[[i]][["V1"]])
+  y <- data.frame(ccl1tccl2t[[i]][["V2"]])
+   comparisons[[i]] <- testCov(x, y, method = "HD", J = 1000, alpha = 0.05, n.core = 6)
+}
+
+
+# get names of electrodes
+names(comparisons) <- trials$trial_info
+
+
+# extract electrode names, p values and statistic
+
+cccxt <- comparisons
+
+vars <- c("Trial", "Statistics", "P-val")
+
+# extract statistics and p value
+location_1 <- lapply(cccxt, function (x) x[c("statistics")])
+location_2 <- lapply(cccxt, function (x) x[c( "p.value")])
+
+#convert statistics into dataframe column
+ccldf1t <- do.call(rbind, location_1)
+ccldf1t1 <- do.call(rbind,ccldf1t)
+
+#convert pvalues into dataframe column
+ccldf2t <- do.call(rbind, location_2)
+
+ccndf_xt <- data.frame(ccldf1t1, ccldf2t)
+
+ccndf_xt$Trials <- row.names(ccndf_xt)
+
+ccnew <- ccndf_xt
+ccnew <- apply(ccnew,2,as.character)
+
+#write.csv(ccnew,'P1P2_Trial_block_Wise.csv', row.names = FALSE)
+
+ccnew
+
+
+```
+
+
+```{r}
+sxt <- ggplot(ccndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.05)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for P1 versus P2") + 
+  theme_minimal()
+
+#png('P1_P2_Trial_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+```{r}
+sxt <- ggplot(ccndf_xt, aes(reorder(Trials, Statistic), Statistic))  +
+  geom_col(aes(fill=p.value<0.10)) +
+  coord_flip() +
+  labs(x="Trials", y="Statistic",
+       title="Trials significant in Experiment 1 
+       versus Experiment 2 sorted by HD statistic
+       for P1 versus P2") + 
+  theme_minimal()
+
+#png('P1_P2_Trail_block_Wise_point_05.#png', units="in", width=5, height=5, res=300)
+sxt
+#dev.off()
+
+sxt
+```
+
+
+
+Total comparisons = 7
+
+	Electrodes S1 S2 P1E1
+	Trials S1 S2 P1E1
+
+	Electrodes S1 S2 P1E2
+	Trials S1 S2 P1E2
+
+	Electrodes S1 S2 P2E1
+	Trials S1 S2 P1E1
+
+	Electrodes S1 S2 P2E2
+	Trials S1 S2 P1E2
+
+
+
+
+
+
+
+	Electrodes P1E1 P1E2
+	Trials P1E1 P2E2
+
+	Electrodes P2E1 P2E2
+	Trials P2E1 P2E2
+
+
+
+
+
+
+
+	Electrodes P1 P2
+	Trials P1 P2
+
+

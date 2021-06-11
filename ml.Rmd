@@ -1,0 +1,359 @@
+---
+title: "ml"
+author: "Amrit Hui"
+date: "6/8/2021"
+output: html_document
+---
+
+EXPERIMENTAL PART OF THE NOTEBOOK
+
+```{r}
+
+# devtools::install_github("nproellochs/ReinforcementLearning"
+library (plyr)
+library(dplyr)
+# plotting
+library(ggplot2)
+library(corrplot) # correlation plot 
+# succinct summary of dataset
+library(psych)
+library(lmtest)
+
+# data operations
+library(dplyr)  
+library(tidyr) 
+
+library(polycor) # hetcor
+
+library(ggfortify) # pca, variable selection etc
+
+library(pROC) # roc plots
+library(ROCR)
+
+library(performance) # comparing performances of two models
+
+set.seed(52)
+
+library(eegkit) # ica
+```
+FUNCTIONS
+
+```{r}
+# pca descriptive plots
+pcaCharts <- function(x) {
+    x.var <- x$sdev ^ 2
+    x.pvar <- x.var/sum(x.var)
+    print("proportions of variance:")
+    print(x.pvar)
+    
+    par(mfrow=c(2,2))
+    plot(x.pvar,xlab="Principal component", ylab="Proportion of variance explained", ylim=c(0,1), type='b')
+    plot(cumsum(x.pvar),xlab="Principal component", ylab="Cumulative Proportion of variance explained", ylim=c(0,1), type='b')
+    screeplot(x)
+    screeplot(x,type="l")
+    par(mfrow=c(1,1))
+}
+
+# credits: https://rpubs.com/njvijay/27823
+
+# simple ROC function
+
+simple_roc <- function(labels, scores){
+  labels <- labels[order(scores, decreasing=TRUE)]
+  data.frame(TPR=cumsum(labels)/sum(labels), FPR=cumsum(!labels)/sum(!labels), labels)
+}
+
+# credits: https://blog.revolutionanalytics.com/2016/08/roc-curves-in-two-lines-of-code.html
+```
+
+
+```{r}
+
+options(scipen=999)
+
+df_segments1 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments2 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+df_segments3 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments4 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+
+
+# df_wavelet <- read.csv2("EEG Files.CSV/AH-p1-ex-1-wavelet -raw-multiplexed.csv/AH_P1_EXPERIMENT_1_Wavelets_Raw Data_multiplexed.csv.csv", header = F)
+```
+
+
+```{r}
+col_names <- c(
+ 'Fp1',
+ 'F3',
+ 'F7',
+ 'FT9',
+ 'FC5',
+ 'FC1',
+ 'C3',
+ 'T7',
+ 'TP9',
+ 'CP5',
+ 'CP1',
+ 'Pz',
+ 'P3',
+ 'P7',
+ 'O1',
+ 'Oz',
+ 'O2',
+ 'P4',
+ 'P8',
+ 'TP10',
+ 'CP6',
+ 'CP2',
+ 'Cz',
+ 'C4',
+ 'T8',
+ 'FT10',
+ 'FC6',
+ 'FC2',
+ 'F4',
+ 'F8',
+ 'Fp2')
+```
+
+
+```{r}
+colnames(df_segments1) <- col_names
+colnames(df_segments2) <- col_names
+colnames(df_segments3) <- col_names
+colnames(df_segments4) <- col_names
+```
+
+```{r}
+df_segments1['trial_info'] <- 'A'
+df_segments1['trial_block'] <- 'B'
+
+df_segments1['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments1['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments1['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments1['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments1['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments1['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments1['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments1['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments1['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments1['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments1['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments1['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments1['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments1['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments1['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments1['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments1['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments1['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments1['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments1['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments1['trial_block'][1:30000, ] <- 'Set 1'
+df_segments1['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments2['trial_info'] <- 'A'
+df_segments2['trial_block'] <- 'B'
+
+df_segments2['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments2['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments2['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments2['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments2['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments2['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments2['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments2['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments2['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments2['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments2['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments2['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments2['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments2['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments2['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments2['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments2['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments2['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments2['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments2['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments2['trial_block'][1:30000, ] <- 'Set 1'
+df_segments2['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments3['trial_info'] <- 'A'
+df_segments3['trial_block'] <- 'B'
+
+df_segments3['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments3['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments3['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments3['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments3['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments3['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments3['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments3['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments3['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments3['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments3['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments3['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments3['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments3['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments3['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments3['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments3['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments3['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments3['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments3['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments3['trial_block'][1:30000, ] <- 'Set 1'
+df_segments3['trial_block'][30001:60000, ] <- 'Set 2'
+
+df_segments4['trial_info'] <- 'A'
+df_segments4['trial_block'] <- 'B'
+
+df_segments4['trial_info'][1:3000, ] <- 'Trial 1'
+df_segments4['trial_info'][3001:6000, ] <- 'Trial 2'
+df_segments4['trial_info'][6001:9000, ] <- 'Trial 3'
+df_segments4['trial_info'][9001:12000, ] <- 'Trial 4'
+df_segments4['trial_info'][12001:15000, ] <- 'Trial 5'
+df_segments4['trial_info'][15001:18000, ] <- 'Trial 6'
+df_segments4['trial_info'][18001:21000, ] <- 'Trial 7'
+df_segments4['trial_info'][21001:24000, ] <- 'Trial 8'
+df_segments4['trial_info'][24001:27000, ] <- 'Trial 9'
+df_segments4['trial_info'][27001:30000, ] <- 'Trial 10'
+df_segments4['trial_info'][30001:33000, ] <- 'Trial 11'
+df_segments4['trial_info'][33001:36000, ] <- 'Trial 12'
+df_segments4['trial_info'][36001:39000, ] <- 'Trial 13'
+df_segments4['trial_info'][39001:42000, ] <- 'Trial 14'
+df_segments4['trial_info'][42001:45000, ] <- 'Trial 15'
+df_segments4['trial_info'][45001:48000, ] <- 'Trial 16'
+df_segments4['trial_info'][48001:51000, ] <- 'Trial 17'
+df_segments4['trial_info'][51001:54000, ] <- 'Trial 18'
+df_segments4['trial_info'][54001:57000, ] <- 'Trial 19'
+df_segments4['trial_info'][57001:60000, ] <- 'Trial 20'
+
+df_segments4['trial_block'][1:30000, ] <- 'Set 1'
+df_segments4['trial_block'][30001:60000, ] <- 'Set 2'
+
+
+```
+
+
+Demonstrating the utility of classification. [work in progress]
+```{r}
+## TEST
+test_unlock_1 <- df_segments1[20001:60000, ]
+
+test_lock_1 <- df_segments2[20001:60000, ]
+
+#colnames(ldf) <- 1:500
+test_df <- data.frame(rbind(test_unlock_1, test_lock_1))
+
+test_df['actions'] <- "A"
+test_df['states'] <- "B"
+
+test_df['actions'][1:40000, ] <- "unlock"
+test_df['actions'][40001:80000, ] <- "lock"
+test_df['states'][1:40000, ] <- "1"
+test_df['states'][40001:80000, ] <- "0"
+
+head(test_df, n =5)
+
+##################
+
+# TRAIN
+
+train_unlock_1 <- df_segments1[1:20000, ]
+
+train_lock_1 <- df_segments2[1:20000, ]
+
+train_df <- data.frame(rbind(train_unlock_1, train_lock_1))
+
+train_df['actions'] <- "A"
+train_df['states'] <- "B"
+
+train_df['actions'][1:20000, ] <- "unlock"
+train_df['actions'][20001:40000, ] <- "lock"
+train_df['states'][1:20000, ] <- "1"
+train_df['states'][20001:40000, ] <- "0"
+
+head(train_df, n =5)
+```
+
+
+```{r}
+# sample 10000 rows from test
+
+s_test <- test_df
+
+# sample 2000 rows from train
+
+s_train <- train_df 
+
+```
+
+Using ICA from EEGkit.
+
+```{r}
+
+options(scipen=999)
+
+df_segments1 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments2 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P1_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+df_segments3 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_1_Segmentation_multiplexed.csv.csv", header = F)
+df_segments4 <- read.csv2("~/Downloads/eeg_1/p1 versus p2/AH_P2_EXPERIMENT_2_Segmentation_multiplexed.csv.csv", header = F)
+
+
+# df_wavelet <- read.csv2("EEG Files.CSV/AH-p1-ex-1-wavelet -raw-multiplexed.csv/AH_P1_EXPERIMENT_1_Wavelets_Raw Data_multiplexed.csv.csv", header = F)
+```
+
+
+```{r}
+
+new_data_sub <- s_train[1:31]
+new_data_sub <- t(new_data_sub) # rows as channels, columns as time points (format requirement for eegica function)
+
+eegmean <- new_data_sub
+
+data(eegcoord) # get eeg coordinates
+
+cidx <- match(rownames(eegmean),rownames(eegcoord))
+
+
+```
+
+Perform ICA (4 components)
+
+Temporal ICA
+```{r}
+# temporal ICA with 4 components
+icatime <- eegica(eegmean,4)
+icatime$vafs
+
+
+```
+
+In this case each we can see that first 4 components account for <80 % variance.
+```{r}
+
+a <- data.frame(icatime[["Y"]])
+b <- a[1:3000,1:4]
+
+c <- a[20001:23000, 1:4]
+
+
+ggplot() + 
+  geom_line(data = b, aes(x=1:3000, y = X1), color = "grey", size=2) +
+  geom_line(data = b, aes(x = 1:3000, y = X2), color = "darkgreen") +
+  xlab('Dates') +
+  ylab('percent.change')  # first layer  # second layer
+
+
+```
+```{r}
+ggplot() + 
+  geom_line(data = c, aes(x=1:3000, y = X1), color = "grey",  size=2) +
+  geom_line(data = c, aes(x = 1:3000, y = X2), color = "darkred") +
+  xlab('Dates') +
+  ylab('percent.change')  # first layer  # second layer
+
+
+```
